@@ -1,0 +1,19 @@
+# 数据库（用户数据，不进版本控制）
+data.db
+
+# 旧版 JSON 数据备份
+data.json
+data.json.bak
+
+# Python 缓存
+__pycache__/
+*.pyc
+
+# PyInstaller 打包中间产物
+build/
+dist/
+*.spec
+
+# 操作系统
+.DS_Store
+Thumbs.db

@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>待办事项追踪</title>
+    <link rel="stylesheet" href="/style.css">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📋</text></svg>">
+</head>
+<body>
+    <div id="app">
+        <!-- 顶部导航栏 -->
+        <header class="topbar">
+            <div class="logo">
+                <span class="logo-icon">📋</span>
+                <span class="logo-text">待办事项追踪</span>
+            </div>
+            <div class="topbar-actions">
+                <input type="text" id="searchInput" class="search-input"
+                       placeholder="搜索事项、负责人、备注..." autocomplete="off">
+                <button id="themeToggle" class="btn btn-icon" title="切换深色/浅色模式">🌙</button>
+                <button id="exportBtn" class="btn btn-secondary" title="导出 JSON 数据">导出</button>
+                <button id="addItemBtn" class="btn btn-primary" title="新建顶层事项">+ 新建事项</button>
+            </div>
+        </header>
+
+        <main class="layout">
+            <!-- 左侧统计看板 -->
+            <aside class="sidebar">
+                <div class="stats-card" id="statsCard">
+                    <!-- JS 渲染统计内容 -->
+                </div>
+
+                <div class="filter-panel">
+                    <h3 class="filter-title">筛选</h3>
+
+                    <label class="filter-group">
+                        <span class="filter-label">状态</span>
+                        <select id="filterStatus" class="select">
+                            <option value="">全部</option>
+                            <option value="pending">待开始</option>
+                            <option value="in_progress">进行中</option>
+                            <option value="done">已完成</option>
+                            <option value="blocked">阻塞</option>
+                        </select>
+                    </label>
+
+                    <label class="filter-group">
+                        <span class="filter-label">优先级</span>
+                        <select id="filterPriority" class="select">
+                            <option value="">全部</option>
+                            <option value="urgent">紧急</option>
+                            <option value="high">高</option>
+                            <option value="medium">中</option>
+                            <option value="low">低</option>
+                        </select>
+                    </label>
+
+                    <label class="filter-group">
+                        <span class="filter-label">负责人</span>
+                        <select id="filterOwner" class="select">
+                            <option value="">全部</option>
+                        </select>
+                    </label>
+
+                    <label class="filter-group checkbox-group">
+                        <input type="checkbox" id="filterOverdue">
+                        <span>仅看逾期</span>
+                    </label>
+
+                    <button id="resetFilter" class="btn btn-text">重置筛选</button>
+                </div>
+            </aside>
+
+            <!-- 右侧事项树 -->
+            <section class="content">
+                <div class="content-header">
+                    <div class="view-tabs">
+                        <button class="view-tab active" data-view="list">📋 列表</button>
+                        <button class="view-tab" data-view="board">📐 看板</button>
+                        <button class="view-tab" data-view="gantt">📊 甘特</button>
+                        <button class="view-tab" data-view="calendar">📅 日历</button>
+                        <button class="view-tab" data-view="archive">📦 归档</button>
+                    </div>
+                    <div class="content-toolbar" id="listToolbar">
+                        <button id="expandAllBtn" class="btn btn-text">全部展开</button>
+                        <button id="collapseAllBtn" class="btn btn-text">全部折叠</button>
+                    </div>
+                </div>
+
+                <!-- 列表视图 -->
+                <div class="view-pane active" id="viewList">
+                    <div class="tree-container">
+                        <div id="tree" class="tree">
+                            <div class="empty-state" id="emptyState">
+                                <div class="empty-icon">📝</div>
+                                <p>暂无事项，点击右上角"新建事项"开始</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 看板视图 -->
+                <div class="view-pane" id="viewBoard">
+                    <div id="board" class="board"></div>
+                </div>
+
+                <!-- 甘特视图 -->
+                <div class="view-pane" id="viewGantt">
+                    <div id="gantt" class="gantt"></div>
+                </div>
+
+                <!-- 日历视图 -->
+                <div class="view-pane" id="viewCalendar">
+                    <div class="calendar-header">
+                        <button id="calPrev" class="btn btn-text">◀</button>
+                        <span id="calTitle" class="cal-title"></span>
+                        <button id="calNext" class="btn btn-text">▶</button>
+                        <button id="calToday" class="btn btn-text">今天</button>
+                    </div>
+                    <div id="calendar" class="calendar"></div>
+                </div>
+
+                <!-- 归档视图（只读列表 + 搜索筛选） -->
+                <div class="view-pane" id="viewArchive">
+                    <div class="archive-header">
+                        <input type="text" id="archiveSearch" class="search-input"
+                               placeholder="搜索归档事项..." autocomplete="off">
+                        <select id="archiveFilterStatus" class="select">
+                            <option value="">全部状态</option>
+                            <option value="pending">待开始</option>
+                            <option value="in_progress">进行中</option>
+                            <option value="done">已完成</option>
+                            <option value="blocked">阻塞</option>
+                        </select>
+                        <button id="archiveRestoreBtn" class="btn btn-secondary" disabled>恢复选中</button>
+                    </div>
+                    <div id="archiveList" class="archive-list"></div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- 事项编辑弹窗 -->
+    <div id="modalOverlay" class="modal-overlay hidden">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 id="modalTitle">新建事项</h3>
+                <button id="modalClose" class="btn btn-icon" title="关闭">✕</button>
+            </div>
+            <form id="itemForm" class="modal-body">
+                <input type="hidden" id="fieldId">
+                <input type="hidden" id="fieldParentId">
+
+                <label class="form-group">
+                    <span class="form-label">标题 <span class="required">*</span></span>
+                    <input type="text" id="fieldTitle" class="input" required maxlength="200" placeholder="事项标题">
+                </label>
+
+                <div class="form-row">
+                    <label class="form-group">
+                        <span class="form-label">负责人</span>
+                        <input type="text" id="fieldOwner" class="input" maxlength="50" placeholder="负责人姓名">
+                    </label>
+                    <label class="form-group">
+                        <span class="form-label">优先级</span>
+                        <select id="fieldPriority" class="select">
+                            <option value="low">低</option>
+                            <option value="medium" selected>中</option>
+                            <option value="high">高</option>
+                            <option value="urgent">紧急</option>
+                        </select>
+                    </label>
+                </div>
+
+                <div class="form-row">
+                    <label class="form-group">
+                        <span class="form-label">状态</span>
+                        <select id="fieldStatus" class="select">
+                            <option value="pending">待开始</option>
+                            <option value="in_progress">进行中</option>
+                            <option value="done">已完成</option>
+                            <option value="blocked">阻塞</option>
+                        </select>
+                    </label>
+                    <label class="form-group">
+                        <span class="form-label">进度 (%)</span>
+                        <input type="number" id="fieldProgress" class="input" min="0" max="100" value="0">
+                    </label>
+                </div>
+
+                <div class="form-row">
+                    <label class="form-group">
+                        <span class="form-label">计划完成时间</span>
+                        <input type="date" id="fieldPlanEnd" class="input">
+                    </label>
+                    <label class="form-group">
+                        <span class="form-label">实际完成时间</span>
+                        <input type="date" id="fieldActualEnd" class="input">
+                    </label>
+                </div>
+
+                <label class="form-group">
+                    <span class="form-label">标签（逗号分隔）</span>
+                    <input type="text" id="fieldTags" class="input" placeholder="例如：前端, 紧急">
+                </label>
+
+                <label class="form-group">
+                    <span class="form-label">依赖事项（多选）</span>
+                    <select id="fieldDepends" class="select" multiple size="4" style="height:auto">
+                        <option value="" disabled>请选择...</option>
+                    </select>
+                </label>
+
+                <label class="form-group">
+                    <span class="form-label">备注</span>
+                    <textarea id="fieldRemark" class="input textarea" rows="3" placeholder="补充说明..."></textarea>
+                </label>
+
+                <!-- 评论区（仅编辑已有事项时显示） -->
+                <div class="form-group comment-section" id="commentSection" style="display:none">
+                    <span class="form-label">评论</span>
+                    <div id="commentList" class="comment-list"></div>
+                    <div class="comment-input">
+                        <input type="text" id="commentAuthor" class="input" placeholder="昵称">
+                        <input type="text" id="commentText" class="input" placeholder="评论内容...">
+                        <button type="button" id="commentAdd" class="btn btn-secondary">发送</button>
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" id="modalCancel" class="btn btn-secondary">取消</button>
+                    <button type="submit" class="btn btn-primary">保存</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Toast 提示 -->
+    <div id="toast" class="toast hidden"></div>
+
+    <script src="/app.js"></script>
+</body>
+</html>
