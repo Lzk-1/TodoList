@@ -803,10 +803,20 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
 .gantt-table .gantt-task-col {
     text-align: left;
     min-width: 200px;
+    max-width: 250px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     position: sticky;
     left: 0;
     background: var(--bg-primary);
     z-index: 2;
+}
+.gantt-table .gantt-task-col .gantt-tooltip {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 .gantt-table th.gantt-task-col {
     background: var(--bg-elevated);
@@ -838,6 +848,30 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
 .gantt-bar.overdue { background: var(--danger); }
 .gantt-bar.done { background: var(--success); opacity: .6; }
 .gantt-bar.blocked { background: var(--warning); color: #333; }
+
+/* 甘特图自定义 tooltip（JS 浮动 div） */
+.gantt-tooltip {
+    cursor: pointer;
+}
+.gantt-float-tip {
+    position: fixed;
+    padding: 5px 10px;
+    background: #2d2d2d;
+    color: #f0f0f0;
+    font-size: 13px;
+    line-height: 1.4;
+    white-space: nowrap;
+    border-radius: 6px;
+    box-shadow: 0 3px 10px rgba(0,0,0,.25);
+    pointer-events: none;
+    z-index: 9999;
+    opacity: 0;
+    transition: opacity .15s ease;
+}
+.gantt-float-tip.show {
+    opacity: 1;
+}
+
 .gantt-weekend {
     background: var(--bg-hover);
 }

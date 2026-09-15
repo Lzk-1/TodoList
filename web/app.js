@@ -527,6 +527,9 @@
             return;
         }
         renderTree();
+        // 切换视图时隐藏浮动 tooltip
+        const tip = document.getElementById('ganttTip');
+        if (tip) tip.classList.remove('show');
     }
 
     // ==========================================================================
@@ -671,10 +674,10 @@
                 return `<td class="${weekend}"></td>`;
             }).join('');
             return `<tr>
-                <td class="gantt-task-col" title="${escapeHtml(it.title)}">${escapeHtml(it.title)}</td>
+                <td class="gantt-task-col"><span class="gantt-tooltip" data-title="${escapeHtml(it.title)}">${escapeHtml(it.title)}</span></td>
                 ${cellPre}
                 <td class="gantt-bar-cell">
-                    <div class="gantt-bar ${barCls}" data-gantt-id="${escapeHtml(it.id)}">
+                    <div class="gantt-bar ${barCls} gantt-tooltip" data-gantt-id="${escapeHtml(it.id)}" data-title="${escapeHtml(it.title)}">
                         ${escapeHtml(it.title.slice(0, 12))}
                     </div>
                 </td>
@@ -686,6 +689,35 @@
         gantt.querySelectorAll('[data-gantt-id]').forEach(el => {
             el.addEventListener('click', () => openModal(el.dataset.ganttId));
         });
+
+        // 自定义浮动 tooltip（避免被 overflow: hidden 裁剪）
+        if (!gantt._tipBound) {
+            gantt._tipBound = true;
+            const tip = document.getElementById('ganttTip') || (() => {
+                const el = document.createElement('div');
+                el.id = 'ganttTip';
+                el.className = 'gantt-float-tip';
+                document.body.appendChild(el);
+                return el;
+            })();
+            gantt.addEventListener('mouseenter', () => { tip._on = true; }, {passive:true});
+            gantt.addEventListener('mouseleave', () => { tip._on = false; tip.classList.remove('show'); }, {passive:true});
+            gantt.addEventListener('mousemove', (e) => {
+                const el = e.target.closest('.gantt-tooltip');
+                if (el && tip._on) {
+                    const text = el.dataset.title || el.title;
+                    if (tip.textContent !== text) tip.textContent = text;
+                    tip.classList.add('show');
+                    let x = e.clientX + 14, y = e.clientY - 8;
+                    const tw = tip.offsetWidth;
+                    if (x + tw > window.innerWidth - 10) x = e.clientX - tw - 14;
+                    tip.style.left = x + 'px';
+                    tip.style.top = y + 'px';
+                } else {
+                    tip.classList.remove('show');
+                }
+            }, {passive:true});
+        }
     }
 
     // ==========================================================================
