@@ -18,9 +18,11 @@
             <div class="topbar-actions">
                 <input type="text" id="searchInput" class="search-input"
                        placeholder="搜索事项、负责人、备注..." autocomplete="off">
-                <button id="themeToggle" class="btn btn-icon" title="切换深色/浅色模式">🌙</button>
-                <button id="exportBtn" class="btn btn-secondary" title="导出 JSON 数据">导出</button>
-                <button id="addItemBtn" class="btn btn-primary" title="新建顶层事项">+ 新建事项</button>
+                <button id="themeToggle" type="button" class="btn btn-icon" title="切换深色/浅色模式">🌙</button>
+                <button id="exportBtn" type="button" class="btn btn-secondary" title="导出 JSON 数据">导出</button>
+                <button id="importBtn" type="button" class="btn btn-secondary" title="从 JSON 文件导入数据">导入</button>
+                <input type="file" id="importFile" accept=".json,application/json" style="display:none">
+                <button id="addItemBtn" type="button" class="btn btn-primary" title="新建顶层事项">+ 新建事项</button>
             </div>
         </header>
 
@@ -206,12 +208,15 @@
                     <input type="text" id="fieldTags" class="input" placeholder="例如：前端, 紧急">
                 </label>
 
-                <label class="form-group">
+                <div class="form-group">
                     <span class="form-label">依赖事项（多选）</span>
-                    <select id="fieldDepends" class="select" multiple size="4" style="height:auto">
-                        <option value="" disabled>请选择...</option>
-                    </select>
-                </label>
+                    <!-- 已选标签区 -->
+                    <div id="dependsChips" class="depends-chips"></div>
+                    <!-- 候选列表：点击即选中/取消 -->
+                    <div id="dependsOptions" class="depends-options"></div>
+                    <!-- 隐藏的原生 select，仅作数据容器（提交时读取） -->
+                    <div id="dependsSelected" hidden></div>
+                </div>
 
                 <label class="form-group">
                     <span class="form-label">备注</span>
@@ -234,6 +239,19 @@
                     <button type="submit" class="btn btn-primary">保存</button>
                 </div>
             </form>
+        </div>
+    </div>
+
+    <!-- 当日事项弹窗（日历视图点击日期格子弹出） -->
+    <div id="dayModal" class="modal-overlay hidden">
+        <div class="modal day-modal">
+            <div class="modal-header">
+                <h3 id="dayModalTitle">当日事项</h3>
+                <button id="dayModalClose" type="button" class="btn btn-icon" title="关闭">✕</button>
+            </div>
+            <div class="modal-body">
+                <div id="dayEventList" class="day-event-list"></div>
+            </div>
         </div>
     </div>
 

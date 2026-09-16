@@ -81,14 +81,22 @@
         return d;
     }
 
+    // 本地时区的 YYYY-MM-DD（不能用 toISOString，它在 UTC+8 会早一天）
+    function dateKey(d) {
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+    }
+
     function isOverdue(item) {
         if (item.status === 'done' || !item.plan_end) return false;
-        const today = new Date().toISOString().slice(0, 10);
+        const today = dateKey(new Date());
         return (item.plan_end.length <= 10 ? item.plan_end : item.plan_end.slice(0, 10)) < today;
     }
 
     function todayStr() {
-        return new Date().toISOString().slice(0, 10);
+        return dateKey(new Date());
     }
 
     // 由扁平列表构建子项索引
@@ -432,7 +440,7 @@
             actual_end: $('fieldActualEnd').value || null,
             tags: $('fieldTags').value.split(',').map(s => s.trim()).filter(Boolean),
             remark: $('fieldRemark').value,
-            depends_on: Array.from($('fieldDepends').selectedOptions).map(o => o.value),
+            depends_on: getDependsSelection(),
         };
         const parentId = $('fieldParentId').value;
         if (parentId) payload.parent_id = parentId;
@@ -504,6 +512,38 @@
             toast('已导出', 'success');
         } catch (e) {
             toast('导出失败：' + e.message, 'error');
+        }
+    }
+
+    // ==========================================================================
+    // 导入
+    // ==========================================================================
+    async function importData(file) {
+        // 读文件 → 解析 JSON → confirm 预览 → POST /api/import
+        // Why: 用 confirm 二次确认防止误导入覆盖当前数据
+        let data;
+        try {
+            const text = await file.text();
+            data = JSON.parse(text);
+        } catch (e) {
+            toast('文件解析失败：' + e.message, 'error');
+            return;
+        }
+        if (!data || !Array.isArray(data.items)) {
+            toast('文件格式不正确，缺少 items 数组', 'error');
+            return;
+        }
+        const n = data.items.length;
+        if (!confirm(`即将导入 ${n} 条事项。\n\n说明：\n- ID 已存在的条目将被跳过（不覆盖）\n- 子项的父项若在导入集合中，会自动按拓扑顺序导入\n- 导入完成会刷新当前视图`)) {
+            return;
+        }
+        try {
+            const result = await api('POST', '/api/import', data);
+            toast(`导入完成：新增 ${result.imported} 条，跳过 ${result.skipped} 条，评论 ${result.comments} 条`, 'success');
+            await loadItems();
+            await loadArchived();
+        } catch (e) {
+            toast('导入失败：' + e.message, 'error');
         }
     }
 
@@ -765,7 +805,7 @@
             return `<div class="cal-day-name${weekend}">${n}</div>`;
         }).join('');
         const bodyHtml = cells.map(c => {
-            const key = c.date.toISOString().slice(0, 10);
+            const key = dateKey(c.date);
             const events = evMap[key] || [];
             const cls = [];
             if (c.other) cls.push('other-month');
@@ -791,6 +831,61 @@
                 openModal(el.dataset.calId);
             });
         });
+        // 点击日期格子（非具体事项）弹出当日事项列表
+        // Why: 格子最多显示 3 条，多于 3 条时通过弹窗查看全部
+        cal.querySelectorAll('.cal-day').forEach(el => {
+            el.addEventListener('click', () => openDayModal(el.dataset.calDate));
+        });
+    }
+
+    // ==========================================================================
+    // 当日事项弹窗（日历）
+    // ==========================================================================
+    function openDayModal(dateKeyStr) {
+        const events = filteredItems.filter(it =>
+            it.plan_end && it.plan_end.slice(0, 10) === dateKeyStr
+        );
+        // 标题：日期 + 周几 + 条数
+        const d = new Date(dateKeyStr + 'T00:00:00');
+        const week = ['日', '一', '二', '三', '四', '五', '六'][d.getDay()];
+        $('dayModalTitle').textContent =
+            `${dateKeyStr.replace(/-/g, '/')} 周${week} · ${events.length} 条事项`;
+
+        const list = $('dayEventList');
+        if (events.length === 0) {
+            list.innerHTML = '<div class="day-event-empty">当日无事项</div>';
+        } else {
+            list.innerHTML = events.map(it => {
+                const sc = it.status === 'done' ? 'done'
+                         : it.status === 'blocked' ? 'blocked'
+                         : isOverdue(it) ? 'overdue'
+                         : it.status === 'pending' ? 'pending' : '';
+                const owner = it.owner ? `<span class="day-event-owner">${escapeHtml(it.owner)}</span>` : '';
+                return `<div class="day-event-item ${sc}" data-day-id="${escapeHtml(it.id)}">
+                    <div class="day-event-main">
+                        <span class="day-event-status ${sc}">${STATUS_LABEL[it.status] || it.status}</span>
+                        <span class="day-event-title">${escapeHtml(it.title)}</span>
+                        ${owner}
+                    </div>
+                    <div class="day-event-meta">
+                        <span>优先级：${PRIORITY_LABEL[it.priority] || it.priority || '中'}</span>
+                        ${it.progress ? `<span>进度：${it.progress}%</span>` : ''}
+                    </div>
+                </div>`;
+            }).join('');
+            // 点击事项 → 关闭当日弹窗 → 打开编辑弹窗
+            list.querySelectorAll('[data-day-id]').forEach(el => {
+                el.addEventListener('click', () => {
+                    closeDayModal();
+                    openModal(el.dataset.dayId);
+                });
+            });
+        }
+        $('dayModal').classList.remove('hidden');
+    }
+
+    function closeDayModal() {
+        $('dayModal').classList.add('hidden');
     }
 
     // ==========================================================================
@@ -962,24 +1057,66 @@
     }
 
     // ==========================================================================
-    // 依赖选择器填充
+    // 依赖选择器（标签式多选，替代原生 select multiple）
+    // Why: 原生 multiple 需要 Ctrl 配合才能取消选择，且选中态不明显
     // ==========================================================================
+    let dependsSelection = new Set();   // 当前已选的依赖 ID 集合
+
     function refreshDependsOptions(currentId, selected) {
-        const sel = $('fieldDepends');
-        // 候选项：除了自己和自己的后代（避免循环依赖）
         const forbidden = new Set(getDescendants(allItems, currentId));
         forbidden.add(currentId);
+        // 候选：排除自己和后代（避免循环依赖）
         const opts = allItems
             .filter(i => !forbidden.has(i.id))
             .map(i => ({ id: i.id, title: i.title }));
-        sel.innerHTML = opts.map(o =>
-            `<option value="${escapeHtml(o.id)}">${escapeHtml(o.title)}</option>`
-        ).join('');
-        // 选中已依赖项
-        (selected || []).forEach(id => {
-            const opt = sel.querySelector(`option[value="${id}"]`);
-            if (opt) opt.selected = true;
+
+        dependsSelection = new Set(selected || []);
+        renderDependsUI(opts);
+    }
+
+    function renderDependsUI(opts) {
+        const chipsBox = $('dependsChips');
+        const listBox = $('dependsOptions');
+
+        // 顶部已选标签
+        const chips = [...dependsSelection].map(id => {
+            const o = opts.find(x => x.id === id);
+            return `<span class="depends-chip" data-dep-id="${escapeHtml(id)}">
+                ${escapeHtml(o ? o.title : id)}
+                <button type="button" class="depends-chip-x" data-dep-x="${escapeHtml(id)}" title="移除">✕</button>
+            </span>`;
+        }).join('');
+        chipsBox.innerHTML = chips || '<span class="depends-chips-empty">未选择依赖</span>';
+
+        // 候选列表（无搜索必要，直接全列 + 选中高亮）
+        const itemsHtml = opts.map(o => {
+            const on = dependsSelection.has(o.id) ? ' on' : '';
+            return `<div class="depends-option${on}" data-dep-opt="${escapeHtml(o.id)}">${escapeHtml(o.title)}</div>`;
+        }).join('');
+        listBox.innerHTML = itemsHtml || '<div class="depends-chips-empty">暂无可选事项</div>';
+
+        // 交互绑定：点击候选 → 切换选中态
+        listBox.querySelectorAll('[data-dep-opt]').forEach(el => {
+            el.addEventListener('click', () => {
+                const id = el.dataset.depOpt;
+                if (dependsSelection.has(id)) dependsSelection.delete(id);
+                else dependsSelection.add(id);
+                renderDependsUI(opts);
+            });
         });
+        // 点击标签上的 ✕ → 移除
+        chipsBox.querySelectorAll('[data-dep-x]').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                dependsSelection.delete(btn.dataset.depX);
+                renderDependsUI(opts);
+            });
+        });
+    }
+
+    /** 供提交时读取当前已选依赖 */
+    function getDependsSelection() {
+        return [...dependsSelection];
     }
 
     // ==========================================================================
@@ -1202,8 +1339,22 @@
             if (e.target.id === 'modalOverlay') closeModal();
         });
 
+        // 当日事项弹窗（日历）
+        $('dayModalClose').addEventListener('click', closeDayModal);
+        $('dayModal').addEventListener('click', (e) => {
+            if (e.target.id === 'dayModal') closeDayModal();
+        });
+
         $('themeToggle').addEventListener('click', toggleTheme);
         $('exportBtn').addEventListener('click', exportData);
+        $('importBtn').addEventListener('click', () => $('importFile').click());
+        $('importFile').addEventListener('change', (e) => {
+            const f = e.target.files[0];
+            if (f) {
+                importData(f);
+                e.target.value = '';  // 重置便于再次选同一文件
+            }
+        });
 
         $('searchInput').addEventListener('input', debounce(applyFilters, 200));
         $('filterStatus').addEventListener('change', applyFilters);

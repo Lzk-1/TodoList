@@ -138,11 +138,13 @@
 | DELETE | `/api/items/{id}` | 删除事项（CASCADE 级联删子项和评论） |
 | POST | `/api/items/{id}/archive` | 手动归档单条（不限状态，不动子项） |
 | POST | `/api/items/{id}/unarchive` | 恢复归档事项到主视图 |
+| POST | `/api/items/batch-delete` | 批量永久删除归档事项（请求体 `{ids: [...]}`） |
 | POST | `/api/items/{id}/comments` | 给事项添加评论 |
 | DELETE | `/api/items/{id}/comments/{cid}` | 删除指定评论 |
 | PUT | `/api/reorder` | 批量调整排序和父子关系 |
 | GET | `/api/stats` | 统计聚合（按 status / priority 分组，仅未归档） |
-| GET | `/api/export` | 导出全量 JSON（备份用） |
+| GET | `/api/export` | 导出全量 JSON（未归档 + 已归档，备份用） |
+| POST | `/api/import` | 导入 JSON，按 `parent_id` 拓扑排序，ID 冲突跳过 |
 
 ### 关键约定
 
@@ -156,16 +158,18 @@
 ### 视图模块（Tab 切换，共享数据）
 1. **列表视图**：树形展开/收起、拖拽排序、状态/优先级筛选
 2. **看板视图**：按 status 分列的卡片墙，支持拖卡片改状态
-3. **甘特视图**：按 plan_end 排期的水平时间轴
-4. **日历视图**：月历格子，按状态色码区分事件
-5. **归档视图**：独立 Tab，只读列表 + 搜索/状态筛选 + 批量恢复；与主视图数据隔离
+3. **甘特视图**：按 plan_end 排期的水平时间轴；长标题截断 + 鼠标悬停浮动 tooltip 展示全名
+4. **日历视图**：月历格子，按状态色码区分事件；格子最多 3 条，点击日期空白处弹出**当日事项弹窗**查看全部
+5. **归档视图**：独立 Tab，只读列表 + 搜索/状态筛选 + 批量恢复 + 批量永久删除；与主视图数据隔离
 
 ### 交互模块
 - **拖拽排序**：`mousedown` 设 `draggable`，`dragstart/dragover/drop` 实现；含循环依赖检测
 - **评论 CRUD**：事项详情面板内嵌评论列表，支持新增/删除
 - **搜索筛选**：实时搜索 title/owner/remark，按 status/priority 多维筛选
+- **依赖多选**：编辑面板内自定义多选组件替代原生 `<select multiple>`；点击条目切换选中态（蓝底 + 勾选标记），顶部展示已选标签可单独移除；自动排除自身及后代节点防止循环依赖
 - **主题切换**：`data-theme="dark"` 切换 CSS 变量集，localStorage 持久化
-- **导出**：调 `/api/export` 拉取全量 JSON，触发浏览器下载
+- **导出**：调 `/api/export` 拉取全量 JSON（未归档 + 已归档），触发浏览器下载 `todolist_export_YYYYMMDD.json`
+- **导入**：选文件后解析 JSON，确认弹窗显示待导入条数，调 `/api/import` 后端按 `parent_id` 拓扑排序逐条插入，ID 冲突跳过，整事务回滚；前端 toast 反馈成功/跳过/失败条数
 - **归档/恢复**：主视图行操作菜单含归档按钮（📦，不限状态）；归档 Tab 行操作含恢复（↩️）和永久删除（🗑）；归档态只读
 
 ## 8. 关键技术点

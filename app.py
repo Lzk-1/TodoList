@@ -496,8 +496,125 @@ class TodoStore:
         """导出全量数据，供备份迁移。
 
         Why: 替代旧版直接访问 store._data；返回与旧 JSON 文件同构的对象。
+        含未归档 + 已归档事项，确保导出是完整快照。
         """
-        return {"items": self.list_items()}
+        with self._tx() as conn:
+            rows = conn.execute(
+                "SELECT * FROM items ORDER BY sort_order, created_at"
+            ).fetchall()
+            items = []
+            for r in rows:
+                it = dict(r)
+                for k in self._JSON_COLS:
+                    it[k] = json.loads(it.get(k) or "[]")
+                cs = conn.execute(
+                    "SELECT * FROM comments WHERE item_id=? ORDER BY created_at",
+                    (it["id"],)
+                ).fetchall()
+                it["comments"] = [dict(c) for c in cs]
+                items.append(it)
+        return {"items": items}
+
+    def import_data(self, data: dict) -> dict:
+        """导入全量数据，与 export_all 输出格式兼容。
+
+        策略：
+          - 按 parent_id 拓扑顺序导入（父先于子），避免外键冲突
+          - ID 已存在则跳过，不覆盖本地数据（保守策略，防误覆盖）
+          - comments 一起导入，item_id 冲突同样跳过
+          - 整体在一个事务内，任何异常全量回滚
+        """
+        raw_items = data.get("items", [])
+        if not raw_items:
+            return {"imported": 0, "skipped": 0, "comments": 0}
+
+        # 拓扑排序：parent_id 为空或指向不在导入集合的项 → 第一批
+        id_set = {it.get("id") for it in raw_items if it.get("id")}
+        ordered = []
+        placed = set()
+
+        def _place_ready():
+            """把所有父项已就位（或父不在本次导入集合）的项放入 ordered。"""
+            for it in raw_items:
+                iid = it.get("id")
+                if not iid or iid in placed:
+                    continue
+                pid = it.get("parent_id")
+                # 父为空 或 父不在本次导入集合（外部数据）→ 可放
+                if not pid or pid not in id_set or pid in placed:
+                    placed.add(iid)
+                    ordered.append(it)
+
+        # 简单循环到收敛（N 轮足够）
+        for _ in range(len(raw_items) + 1):
+            before = len(placed)
+            _place_ready()
+            if len(placed) >= len(raw_items):
+                break
+            if len(placed) == before:
+                break  # 有环，剩下的跳过
+
+        imported = 0
+        skipped = 0
+        comments_n = 0
+
+        with self._tx() as conn:
+            existing_ids = {r["id"] for r in conn.execute("SELECT id FROM items")}
+            existing_cids = {r["id"] for r in conn.execute("SELECT id FROM comments")}
+
+            for it in ordered:
+                iid = it.get("id")
+                if not iid or iid in existing_ids:
+                    skipped += 1
+                    continue
+                now = it.get("updated_at") or self._now()
+                record = {
+                    "id": iid,
+                    "parent_id": it.get("parent_id") or None,
+                    "title": (it.get("title") or "").strip() or "(未命名)",
+                    "owner": it.get("owner", ""),
+                    "status": it.get("status", "pending"),
+                    "priority": it.get("priority", "medium"),
+                    "progress": int(it.get("progress", 0) or 0),
+                    "plan_end": it.get("plan_end") or None,
+                    "actual_end": it.get("actual_end") or None,
+                    "remark": it.get("remark", ""),
+                    "tags": json.dumps(it.get("tags", []), ensure_ascii=False),
+                    "depends_on": json.dumps(it.get("depends_on", []), ensure_ascii=False),
+                    "sort_order": int(it.get("sort_order", 0) or 0),
+                    "archived_at": it.get("archived_at") or None,
+                    "created_at": it.get("created_at") or now,
+                    "updated_at": now,
+                }
+                cols = ", ".join(record.keys())
+                placeholders = ", ".join("?" for _ in record)
+                conn.execute(
+                    f"INSERT INTO items ({cols}) VALUES ({placeholders})",
+                    list(record.values())
+                )
+                existing_ids.add(iid)
+                imported += 1
+
+                # 导入评论
+                for c in it.get("comments") or []:
+                    cid = c.get("id")
+                    if not cid or cid in existing_cids:
+                        continue
+                    conn.execute(
+                        "INSERT INTO comments (id, item_id, author, text, created_at) "
+                        "VALUES (?,?,?,?,?)",
+                        (
+                            cid,
+                            iid,
+                            c.get("author", ""),
+                            c.get("text", ""),
+                            c.get("created_at") or self._now(),
+                        )
+                    )
+                    existing_cids.add(cid)
+                    comments_n += 1
+
+        return {"imported": imported, "skipped": skipped, "comments": comments_n}
 
 
 store = TodoStore(DATA_FILE)
@@ -621,6 +738,13 @@ class Handler(BaseHTTPRequestHandler):
                 if store.delete_item(item_id):
                     deleted += 1
             return self._send_json({"deleted": deleted})
+        # 导入数据：/api/import
+        if path == "/api/import":
+            body = self._read_body()
+            if not body or "items" not in body:
+                return self._send_json({"error": "invalid payload, expect {items: [...]}"}, 400)
+            result = store.import_data(body)
+            return self._send_json(result)
         self.send_error(404, "Not Found")
 
     def do_PUT(self):
