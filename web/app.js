@@ -314,10 +314,10 @@
                 ${item.comments && item.comments.length
                     ? `<span class="node-owner" title="${item.comments.length} 条评论">💬${item.comments.length}</span>` : ''}
                 <span class="node-actions">
-                    <button class="node-action-btn" data-addchild="${escapeHtml(item.id)}" title="添加子项">➕</button>
-                    <button class="node-action-btn" data-edit="${escapeHtml(item.id)}" title="编辑">✏️</button>
-                    <button class="node-action-btn" data-archive="${escapeHtml(item.id)}" title="归档（不限状态）">📦</button>
-                    <button class="node-action-btn danger" data-del="${escapeHtml(item.id)}" title="删除">🗑</button>
+                    <button type="button" class="node-action-btn" data-addchild="${escapeHtml(item.id)}" title="添加子项">➕</button>
+                    <button type="button" class="node-action-btn" data-edit="${escapeHtml(item.id)}" title="编辑">✏️</button>
+                    <button type="button" class="node-action-btn" data-archive="${escapeHtml(item.id)}" title="归档（不限状态）">📦</button>
+                    <button type="button" class="node-action-btn danger" data-del="${escapeHtml(item.id)}" title="删除">🗑</button>
                 </span>
             </div>
             ${childrenHtml}
@@ -999,7 +999,7 @@
                     <span class="comment-item-time">${c.created_at.slice(0, 16).replace('T', ' ')}</span>
                 </div>
                 <div class="comment-item-text">${escapeHtml(c.text)}</div>
-                <button class="comment-item-del" data-delcomment="${escapeHtml(c.id)}">删除</button>
+                <button type="button" class="comment-item-del" data-delcomment="${escapeHtml(c.id)}">删除</button>
             </div>
         `).join('');
         list.querySelectorAll('[data-delcomment]').forEach(btn => {
@@ -1086,8 +1086,8 @@
                     : ''}
                 <span class="node-date">归档于 ${formatDate(it.archived_at)}</span>
                 <span class="node-actions">
-                    <button class="node-action-btn" data-restore="${escapeHtml(it.id)}" title="恢复">↩️</button>
-                    <button class="node-action-btn danger" data-del="${escapeHtml(it.id)}" title="永久删除">🗑</button>
+                    <button type="button" class="node-action-btn" data-restore="${escapeHtml(it.id)}" title="恢复">↩️</button>
+                    <button type="button" class="node-action-btn danger" data-del="${escapeHtml(it.id)}" title="永久删除">🗑</button>
                 </span>
             </div>`;
         }).join('');
@@ -1097,8 +1097,11 @@
     }
 
     function updateArchiveRestoreBtn() {
-        const btn = $('archiveRestoreBtn');
-        if (btn) btn.disabled = selectedArchiveIds.size === 0;
+        const disabled = selectedArchiveIds.size === 0;
+        const restoreBtn = $('archiveRestoreBtn');
+        const deleteBtn = $('archiveDeleteBtn');
+        if (restoreBtn) restoreBtn.disabled = disabled;
+        if (deleteBtn) deleteBtn.disabled = disabled;
     }
 
     function bindArchiveEvents() {
@@ -1125,8 +1128,10 @@
                 }
             });
         });
-        list.querySelectorAll('[data-del]').forEach(btn => {
-            btn.addEventListener('click', async () => {
+        list.querySelectorAll('.archive-row [data-del]').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                e.preventDefault();
+                e.stopPropagation();
                 const id = btn.dataset.del;
                 if (!confirm('永久删除该归档事项？此操作不可撤销。')) return;
                 try {
@@ -1155,6 +1160,21 @@
         toast(`已恢复 ${okN} 条`, 'success');
         await loadArchived();
         await loadItems();
+    }
+
+    async function deleteSelected() {
+        const ids = Array.from(selectedArchiveIds);
+        if (!ids.length) return;
+        if (!confirm(`确定要永久删除选中的 ${ids.length} 条归档事项吗？此操作不可恢复。`)) return;
+        try {
+            const res = await api('POST', '/api/items/batch-delete', { ids });
+            selectedArchiveIds.clear();
+            toast(`已删除 ${res.deleted} 条`, 'success');
+            await loadArchived();
+            await loadItems();
+        } catch (e) {
+            toast('批量删除失败：' + e.message, 'error');
+        }
     }
 
     // 主视图行操作：手动归档单条（不限状态）
@@ -1211,6 +1231,10 @@
         $('archiveSearch').addEventListener('input', debounce(renderArchive, 200));
         $('archiveFilterStatus').addEventListener('change', renderArchive);
         $('archiveRestoreBtn').addEventListener('click', restoreSelected);
+        $('archiveDeleteBtn').addEventListener('click', (e) => {
+            e.preventDefault();
+            deleteSelected();
+        });
 
         // 日历视图按钮
         $('calPrev').addEventListener('click', () => {

@@ -164,6 +164,12 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
     border: 1px solid var(--border);
 }
 .btn-secondary:hover { background: var(--bg-hover); }
+.btn-danger {
+    background: #e5534b;
+    color: #fff;
+    border: 1px solid #c9423a;
+}
+.btn-danger:hover { background: #c9423a; }
 .btn-text {
     background: transparent;
     color: var(--primary);

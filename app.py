@@ -610,6 +610,17 @@ class Handler(BaseHTTPRequestHandler):
             if item is None:
                 return self._send_json({"error": "not found or not archived"}, 404)
             return self._send_json(item)
+        # 批量删除归档事项：/api/items/batch-delete
+        if path == "/api/items/batch-delete":
+            body = self._read_body()
+            ids = body.get("ids", [])
+            if not ids:
+                return self._send_json({"error": "no ids provided"}, 400)
+            deleted = 0
+            for item_id in ids:
+                if store.delete_item(item_id):
+                    deleted += 1
+            return self._send_json({"deleted": deleted})
         self.send_error(404, "Not Found")
 
     def do_PUT(self):
