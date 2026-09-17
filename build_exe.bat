@@ -1,42 +1,53 @@
 @echo off
+REM Why: æœ¬æ–‡ä»¶ä¸º UTF-8 ç¼–ç ï¼ˆæ—  BOMï¼‰ï¼Œå¿…é¡»å…ˆåˆ‡åˆ° UTF-8 ä»£ç é¡µï¼Œcmd æ‰èƒ½æ­£ç¡®æ˜¾ç¤ºä¸‹æ–¹ä¸­æ–‡
+chcp 65001 >nul
 REM ============================================================
-REM  TodoList Windows ´ò°ü½Å±¾
-REM  ¹¦ÄÜ£ºÓÃ PyInstaller °Ñ app.py + web/ ´ò°ü³Éµ¥ÎÄ¼ş exe
-REM  ²úÎï£ºdist\TodoList.exe
-REM  Ê¹ÓÃ£ºË«»÷±¾½Å±¾ »ò ÔÚ cmd ÖĞÖ´ĞĞ build_exe.bat
+REM  TodoList Windows æ‰“åŒ…è„šæœ¬
+REM  åŠŸèƒ½ï¼šç”¨ PyInstaller æŠŠ app.py + web/ æ‰“åŒ…æˆå•æ–‡ä»¶ exe
+REM  äº§ç‰©ï¼šdist\TodoList.exe
+REM  ä½¿ç”¨ï¼šåŒå‡»æœ¬è„šæœ¬ æˆ– åœ¨ cmd ä¸­æ‰§è¡Œ build_exe.bat
+REM  ç¼–ç ï¼šUTF-8ï¼ˆæ—  BOMï¼‰+ CRLF è¡Œå°¾ï¼Œé…åˆé¦–è¡Œ chcp 65001 ç”Ÿæ•ˆ
 REM ============================================================
 
 setlocal
 cd /d "%~dp0"
 
-echo [1/4] ¼ì²é Python...
+echo [1/4] æ£€æŸ¥ Python...
 python --version >nul 2>&1
 if errorlevel 1 (
-    echo ´íÎó£ºÎ´¼ì²âµ½ Python£¬ÇëÏÈ°²×° Python 3.8+ ²¢¹´Ñ¡ Add to PATH
-    echo ÏÂÔØµØÖ·£ºhttps://www.python.org/downloads/
+    echo é”™è¯¯ï¼šæœªæ£€æµ‹åˆ° Pythonï¼Œè¯·å…ˆå®‰è£… Python 3.8+ å¹¶å‹¾é€‰ Add to PATH
+    echo ä¸‹è½½åœ°å€ï¼šhttps://www.python.org/downloads/
     pause
     exit /b 1
 )
 
-echo [2/4] °²×° PyInstaller...
-pip install pyinstaller >nul 2>&1
+echo [2/4] å®‰è£… PyInstallerï¼ˆå®˜æ–¹æºå¤±è´¥æ—¶è‡ªåŠ¨åˆ‡æ¢æ¸…åé•œåƒï¼‰...
+python -m pip install pyinstaller >nul 2>&1
 if errorlevel 1 (
-    echo ´íÎó£ºPyInstaller °²×°Ê§°Ü£¬Çë¼ì²éÍøÂçºóÖØÊÔ
-    pause
-    exit /b 1
+    echo å®˜æ–¹æºå®‰è£…å¤±è´¥ï¼Œè‡ªåŠ¨åˆ‡æ¢æ¸…åé•œåƒæºé‡è¯•...
+    python -m pip install pyinstaller -i https://pypi.tuna.tsinghua.edu.cn/simple --trusted-host pypi.tuna.tsinghua.edu.cn
+    if errorlevel 1 (
+        echo é”™è¯¯ï¼šPyInstaller å®‰è£…å¤±è´¥ï¼ˆå®˜æ–¹æºä¸é•œåƒæºå‡ä¸å¯ç”¨ï¼‰
+        echo æ’æŸ¥å»ºè®®ï¼š
+        echo   1. æ£€æŸ¥ç½‘ç»œè¿æ¥ã€ä»£ç†æˆ–é˜²ç«å¢™è®¾ç½®
+        echo   2. æ‰‹åŠ¨æ‰§è¡Œä»¥ä¸‹å‘½ä»¤æŸ¥çœ‹è¯¦ç»†æŠ¥é”™ï¼š
+        echo      python -m pip install pyinstaller -i https://pypi.tuna.tsinghua.edu.cn/simple
+        pause
+        exit /b 1
+    )
 )
 
-echo [3/4] ¿ªÊ¼´ò°ü£¨¿ÉÄÜĞèÒª 1-2 ·ÖÖÓ£©...
-pyinstaller --onefile --name TodoList --add-data "web;web" --clean --noconfirm app.py
+echo [3/4] å¼€å§‹æ‰“åŒ…ï¼ˆå¯èƒ½éœ€è¦ 1-2 åˆ†é’Ÿï¼‰...
+python -m PyInstaller --onefile --name TodoList --add-data "web;web" --clean --noconfirm app.py
 if errorlevel 1 (
-    echo ´íÎó£º´ò°üÊ§°Ü
+    echo é”™è¯¯ï¼šæ‰“åŒ…å¤±è´¥
     pause
     exit /b 1
 )
 
-echo [4/4] ´ò°üÍê³É£¡
-echo ²úÎïÎ»ÖÃ£ºdist\TodoList.exe
-echo Ê¹ÓÃ·½·¨£º°Ñ dist\TodoList.exe ¿½µ½ÈÎÒâÄ¿Â¼Ë«»÷ÔËĞĞ
-echo Êı¾İÎÄ¼ş data.db »á×Ô¶¯Éú³ÉÔÚ exe Í¬¼¶Ä¿Â¼
+echo [4/4] æ‰“åŒ…å®Œæˆï¼
+echo äº§ç‰©ä½ç½®ï¼šdist\TodoList.exe
+echo ä½¿ç”¨æ–¹æ³•ï¼šæŠŠ dist\TodoList.exe æ‹·åˆ°ä»»æ„ç›®å½•åŒå‡»è¿è¡Œ
+echo æ•°æ®æ–‡ä»¶ data.db ä¼šè‡ªåŠ¨ç”Ÿæˆåœ¨ exe åŒçº§ç›®å½•
 echo.
 pause

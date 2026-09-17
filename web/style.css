@@ -452,6 +452,8 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
     border: 1px solid var(--border);
 }
 .progress-fill {
+    /* span 默认 inline，width/height 不生效，必须块化才能按百分比填充 */
+    display: block;
     height: 100%;
     background: var(--primary);
     transition: width 0.3s ease;

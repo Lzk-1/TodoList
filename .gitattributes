@@ -1,0 +1,2 @@
+# Windows 批处理脚本必须保持 CRLF 行尾（cmd 解析要求），Git 强制不做换行符转换
+*.bat text eol=crlf
