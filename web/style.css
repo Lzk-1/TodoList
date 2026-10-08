@@ -249,6 +249,17 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
     opacity: 0.92;
     margin-top: 2px;
 }
+/* 可点击的统计卡片（进行中/已完成/逾期）：悬停高亮 + 按压反馈 */
+.stats-item.stats-click {
+    cursor: pointer;
+    transition: background 0.15s, transform 0.1s;
+}
+.stats-item.stats-click:hover {
+    background: rgba(255, 255, 255, 0.32);
+}
+.stats-item.stats-click:active {
+    transform: scale(0.95);
+}
 
 /* ---------- 筛选面板 ---------- */
 .filter-panel {

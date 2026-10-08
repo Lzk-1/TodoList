@@ -232,15 +232,15 @@
                     <div class="stats-item-num">${s.total}</div>
                     <div class="stats-item-label">总数</div>
                 </div>
-                <div class="stats-item">
+                <div class="stats-item stats-click" data-stat="in_progress" title="点击定位：列表中展开所有进行中事项">
                     <div class="stats-item-num">${s.by_status.in_progress}</div>
                     <div class="stats-item-label">进行中</div>
                 </div>
-                <div class="stats-item">
+                <div class="stats-item stats-click" data-stat="done" title="点击定位：列表中展开所有已完成事项">
                     <div class="stats-item-num">${s.by_status.done}</div>
                     <div class="stats-item-label">已完成</div>
                 </div>
-                <div class="stats-item">
+                <div class="stats-item stats-click" data-stat="overdue" title="点击定位：列表中展开所有逾期事项">
                     <div class="stats-item-num">${overdueCount}</div>
                     <div class="stats-item-label">逾期</div>
                 </div>
@@ -494,6 +494,49 @@
     function collapseAll() {
         expandedIds.clear();
         renderTree();
+    }
+
+    // ==========================================================================
+    // 统计卡片点击定位：跳转列表视图，展开目标事项及其祖先，折叠其余事项
+    // ==========================================================================
+    function resetFilters() {
+        $('searchInput').value = '';
+        $('filterStatus').value = '';
+        $('filterPriority').value = '';
+        filterOwnerSel.value = '';
+        $('filterOverdue').checked = false;
+        applyFilters();
+    }
+
+    function focusStatGroup(type) {
+        const label = type === 'overdue' ? '逾期' : STATUS_LABEL[type];
+        const match = it => type === 'overdue' ? isOverdue(it) : it.status === type;
+        if (!allItems.some(match)) {
+            toast('暂无' + label + '事项');
+            return;
+        }
+
+        // Why: 先清空筛选再匹配，避免既有筛选（如状态、关键字）把目标事项挡在列表外
+        resetFilters();
+        const matched = filteredItems.filter(match);
+
+        // Why: 目标事项需展开自身；其祖先也必须展开，否则深层目标会被折叠的父级遮住
+        const newExpanded = new Set();
+        for (const it of matched) {
+            newExpanded.add(it.id);
+            let pid = it.parent_id;
+            while (pid) {
+                newExpanded.add(pid);
+                const p = filteredItems.find(x => x.id === pid);
+                pid = p ? p.parent_id : null;
+            }
+        }
+        expandedIds = newExpanded;
+        switchView('list');
+
+        // 滚动到第一个命中项，长列表下无需手动翻找
+        const first = tree.querySelector('[data-id="' + CSS.escape(matched[0].id) + '"]');
+        if (first) first.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
 
     // ==========================================================================
@@ -1361,13 +1404,12 @@
         $('filterPriority').addEventListener('change', applyFilters);
         filterOwnerSel.addEventListener('change', applyFilters);
         $('filterOverdue').addEventListener('change', applyFilters);
-        $('resetFilter').addEventListener('click', () => {
-            $('searchInput').value = '';
-            $('filterStatus').value = '';
-            $('filterPriority').value = '';
-            filterOwnerSel.value = '';
-            $('filterOverdue').checked = false;
-            applyFilters();
+        $('resetFilter').addEventListener('click', resetFilters);
+
+        // 统计卡片点击定位（事件委托：renderStats 每次重建 innerHTML，委托不受影响）
+        statsCard.addEventListener('click', (e) => {
+            const el = e.target.closest('[data-stat]');
+            if (el) focusStatGroup(el.dataset.stat);
         });
 
         $('expandAllBtn').addEventListener('click', expandAll);
