@@ -474,7 +474,8 @@ class TodoStore:
         """按状态/优先级/进度汇总，供看板展示。"""
         with self._tx() as conn:
             total = conn.execute("SELECT COUNT(*) AS c FROM items").fetchone()["c"]
-            by_status = {"pending": 0, "in_progress": 0, "done": 0, "blocked": 0}
+            by_status = {"pending": 0, "in_progress": 0, "done": 0, "blocked": 0,
+                         "on_hold": 0}
             for r in conn.execute(
                 "SELECT status, COUNT(*) AS c FROM items GROUP BY status"
             ):

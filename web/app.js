@@ -12,6 +12,7 @@
         in_progress: '进行中',
         done: '已完成',
         blocked: '阻塞',
+        on_hold: '挂起',
     };
     const PRIORITY_LABEL = {
         urgent: '紧急',
@@ -90,7 +91,8 @@
     }
 
     function isOverdue(item) {
-        if (item.status === 'done' || !item.plan_end) return false;
+        // 挂起（主动暂停）期间不计逾期，与阻塞（被动受阻仍算逾期）语义区分
+        if (item.status === 'done' || item.status === 'on_hold' || !item.plan_end) return false;
         const today = dateKey(new Date());
         return (item.plan_end.length <= 10 ? item.plan_end : item.plan_end.slice(0, 10)) < today;
     }
@@ -232,17 +234,25 @@
                     <div class="stats-item-num">${s.total}</div>
                     <div class="stats-item-label">总数</div>
                 </div>
-                <div class="stats-item stats-click" data-stat="in_progress" title="点击定位：列表中展开所有进行中事项">
+                <div class="stats-item stats-click" data-stat="in_progress" title="点击筛选：列表只显示进行中事项">
                     <div class="stats-item-num">${s.by_status.in_progress}</div>
                     <div class="stats-item-label">进行中</div>
                 </div>
-                <div class="stats-item stats-click" data-stat="done" title="点击定位：列表中展开所有已完成事项">
+                <div class="stats-item stats-click" data-stat="done" title="点击筛选：列表只显示已完成事项">
                     <div class="stats-item-num">${s.by_status.done}</div>
                     <div class="stats-item-label">已完成</div>
                 </div>
-                <div class="stats-item stats-click" data-stat="overdue" title="点击定位：列表中展开所有逾期事项">
+                <div class="stats-item stats-click" data-stat="overdue" title="点击筛选：列表只显示逾期事项">
                     <div class="stats-item-num">${overdueCount}</div>
                     <div class="stats-item-label">逾期</div>
+                </div>
+                <div class="stats-item stats-click" data-stat="blocked" title="点击筛选：列表只显示阻塞事项">
+                    <div class="stats-item-num">${s.by_status.blocked}</div>
+                    <div class="stats-item-label">阻塞</div>
+                </div>
+                <div class="stats-item stats-click" data-stat="on_hold" title="点击筛选：列表只显示挂起事项">
+                    <div class="stats-item-num">${s.by_status.on_hold}</div>
+                    <div class="stats-item-label">挂起</div>
                 </div>
             </div>
         `;
@@ -400,6 +410,8 @@
         $('fieldStatus').value = item ? item.status : 'pending';
         $('fieldPriority').value = item ? item.priority : 'medium';
         $('fieldProgress').value = item ? (item.progress || 0) : 0;
+        // 状态与进度联动：已完成的事项进度统一为 100（旧数据可能不一致）
+        if ($('fieldStatus').value === 'done') $('fieldProgress').value = 100;
         $('fieldPlanEnd').value = item ? formatDate(item.plan_end) : '';
         $('fieldActualEnd').value = item ? formatDate(item.actual_end) : '';
         $('fieldTags').value = item && item.tags ? item.tags.join(', ') : '';
@@ -497,7 +509,7 @@
     }
 
     // ==========================================================================
-    // 统计卡片点击定位：跳转列表视图，展开目标事项及其祖先，折叠其余事项
+    // 统计卡片点击筛选：复用侧栏筛选逻辑，列表只显示命中项及其祖先
     // ==========================================================================
     function resetFilters() {
         $('searchInput').value = '';
@@ -516,26 +528,27 @@
             return;
         }
 
-        // Why: 先清空筛选再匹配，避免既有筛选（如状态、关键字）把目标事项挡在列表外
-        resetFilters();
-        const matched = filteredItems.filter(match);
-
-        // Why: 目标事项需展开自身；其祖先也必须展开，否则深层目标会被折叠的父级遮住
-        const newExpanded = new Set();
-        for (const it of matched) {
-            newExpanded.add(it.id);
-            let pid = it.parent_id;
-            while (pid) {
-                newExpanded.add(pid);
-                const p = filteredItems.find(x => x.id === pid);
-                pid = p ? p.parent_id : null;
-            }
+        // Why: 复用侧栏筛选机制而非静默改列表——筛选条件在 UI 上可见，
+        // 用户可通过"重置"按钮一键恢复，与手动筛选行为完全一致
+        $('searchInput').value = '';
+        $('filterPriority').value = '';
+        filterOwnerSel.value = '';
+        if (type === 'overdue') {
+            $('filterStatus').value = '';
+            $('filterOverdue').checked = true;
+        } else {
+            $('filterStatus').value = type;
+            $('filterOverdue').checked = false;
         }
-        expandedIds = newExpanded;
+        applyFilters();
+
+        // Why: 展开全部可见节点（命中项 + 祖先），避免深层命中项被折叠的父级遮住
+        expandAll();
         switchView('list');
 
         // 滚动到第一个命中项，长列表下无需手动翻找
-        const first = tree.querySelector('[data-id="' + CSS.escape(matched[0].id) + '"]');
+        const firstMatched = filteredItems.find(match);
+        const first = firstMatched && tree.querySelector('[data-id="' + CSS.escape(firstMatched.id) + '"]');
         if (first) first.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
 
@@ -618,7 +631,7 @@
     // ==========================================================================
     // 看板视图
     // ==========================================================================
-    const BOARD_STATUSES = ['pending', 'in_progress', 'blocked', 'done'];
+    const BOARD_STATUSES = ['pending', 'in_progress', 'blocked', 'on_hold', 'done'];
 
     function renderBoard() {
         const board = $('board');
@@ -747,7 +760,8 @@
             const colIdx = Math.round((taskDate - start) / 86400000);
             const barCls = isOverdue(it) ? 'overdue'
                          : it.status === 'done' ? 'done'
-                         : it.status === 'blocked' ? 'blocked' : '';
+                         : it.status === 'blocked' ? 'blocked'
+                         : it.status === 'on_hold' ? 'on_hold' : '';
             const cellPre = dateCols.slice(0, colIdx).map(d => {
                 const weekend = (d.getDay() === 0 || d.getDay() === 6) ? 'gantt-weekend' : '';
                 return `<td class="${weekend}"></td>`;
@@ -856,6 +870,7 @@
             const evHtml = events.slice(0, 3).map(it => {
                 const ec = it.status === 'done' ? 'done'
                          : it.status === 'blocked' ? 'blocked'
+                         : it.status === 'on_hold' ? 'on_hold'
                          : isOverdue(it) ? 'overdue'
                          : it.status === 'pending' ? 'pending' : '';
                 return `<div class="cal-event ${ec}" data-cal-id="${escapeHtml(it.id)}" title="${escapeHtml(it.title)}">${escapeHtml(it.title)}</div>`;
@@ -901,6 +916,7 @@
             list.innerHTML = events.map(it => {
                 const sc = it.status === 'done' ? 'done'
                          : it.status === 'blocked' ? 'blocked'
+                         : it.status === 'on_hold' ? 'on_hold'
                          : isOverdue(it) ? 'overdue'
                          : it.status === 'pending' ? 'pending' : '';
                 const owner = it.owner ? `<span class="day-event-owner">${escapeHtml(it.owner)}</span>` : '';
@@ -1380,6 +1396,10 @@
         $('itemForm').addEventListener('submit', submitForm);
         $('modalOverlay').addEventListener('click', (e) => {
             if (e.target.id === 'modalOverlay') closeModal();
+        });
+        // 状态与进度联动：状态切为已完成时进度自动填充 100
+        $('fieldStatus').addEventListener('change', () => {
+            if ($('fieldStatus').value === 'done') $('fieldProgress').value = 100;
         });
 
         // 当日事项弹窗（日历）
