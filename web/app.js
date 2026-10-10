@@ -48,7 +48,15 @@
             opt.body = JSON.stringify(body);
         }
         const resp = await fetch(path, opt);
-        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        if (!resp.ok) {
+            // 尽量把服务器返回的 error 字段透传给用户，而不是笼统的 HTTP 状态码
+            let msg = 'HTTP ' + resp.status;
+            try {
+                const j = await resp.json();
+                if (j && j.error) msg = j.error;
+            } catch (_) { /* 响应不是 JSON 时保持默认提示 */ }
+            throw new Error(msg);
+        }
         return resp.json();
     }
 
@@ -324,6 +332,8 @@
                 ${item.plan_end
                     ? `<span class="node-date ${overdue ? 'overdue' : ''}">📅 ${formatDate(item.plan_end)}</span>`
                     : ''}
+                ${item.remind_email
+                    ? `<span class="node-owner" title="提醒邮箱：${escapeHtml(item.remind_email)}">✉</span>` : ''}
                 <span class="progress-bar"><span class="progress-fill ${item.status === 'done' ? 'done' : ''}"
                        style="width:${item.progress || 0}%"></span></span>
                 <span class="status-tag ${item.status}">${STATUS_LABEL[item.status]}</span>
@@ -416,6 +426,7 @@
         $('fieldActualEnd').value = item ? formatDate(item.actual_end) : '';
         $('fieldTags').value = item && item.tags ? item.tags.join(', ') : '';
         $('fieldRemark').value = item ? (item.remark || '') : '';
+        $('fieldRemindEmail').value = item ? (item.remind_email || '') : '';
 
         // 依赖选择器
         refreshDependsOptions(id || '', (item && item.depends_on) || []);
@@ -452,6 +463,7 @@
             actual_end: $('fieldActualEnd').value || null,
             tags: $('fieldTags').value.split(',').map(s => s.trim()).filter(Boolean),
             remark: $('fieldRemark').value,
+            remind_email: $('fieldRemindEmail').value.trim(),
             depends_on: getDependsSelection(),
         };
         const parentId = $('fieldParentId').value;
@@ -473,6 +485,90 @@
         } catch (e) {
             toast('保存失败：' + e.message, 'error');
         }
+    }
+
+    // ==========================================================================
+    // 邮件提醒设置
+    // ==========================================================================
+    async function openMailModal() {
+        try {
+            const s = await api('GET', '/api/mail/settings');
+            $('mailEnabled').checked = !!s.reminder_enabled;
+            $('mailHost').value = s.smtp_host || '';
+            $('mailPort').value = s.smtp_port || 465;
+            $('mailUser').value = s.smtp_user || '';
+            $('mailPass').value = '';
+            $('mailFrom').value = s.mail_from || '';
+            $('mailTo').value = s.mail_to || '';
+            if ($('mailRemindTime')) $('mailRemindTime').value = s.remind_time || '09:00';
+            $('mailPass').placeholder = s.has_password
+                ? '已设置授权码，留空保持不变'
+                : 'SMTP 授权码（QQ 邮箱在设置中生成）';
+            $('mailModal').classList.remove('hidden');
+        } catch (e) {
+            toast('加载邮件设置失败：' + e.message, 'error');
+        }
+    }
+
+    function closeMailModal() {
+        $('mailModal').classList.add('hidden');
+    }
+
+    // 读取邮件设置表单当前值（保存与测试发送共用）
+    function getMailFormPayload() {
+        return {
+            smtp_host: $('mailHost').value.trim(),
+            smtp_port: parseInt($('mailPort').value, 10) || 465,
+            smtp_user: $('mailUser').value.trim(),
+            smtp_pass: $('mailPass').value,
+            mail_from: $('mailFrom').value.trim(),
+            mail_to: $('mailTo').value.trim(),
+            remind_time: ($('mailRemindTime') ? $('mailRemindTime').value : '') || '09:00',
+            reminder_enabled: $('mailEnabled').checked,
+        };
+    }
+
+    async function saveMailSettings(e) {
+        e.preventDefault();
+        try {
+            await api('PUT', '/api/mail/settings', getMailFormPayload());
+            toast('邮件设置已保存', 'success');
+            closeMailModal();
+        } catch (e) {
+            toast('保存失败：' + e.message, 'error');
+        }
+    }
+
+    // 测试发送：直接用当前表单填写的配置发送（未保存也能测），错误原因会显示在提示里
+    async function testMail() {
+        try {
+            const r = await api('POST', '/api/mail/test', getMailFormPayload());
+            if (r.ok) toast('测试邮件已发送，请查收', 'success');
+            else toast('发送失败：' + (r.error || ''), 'error');
+        } catch (e) {
+            toast('测试失败：' + e.message, 'error');
+        }
+    }
+
+    // 轮询后台邮件发送失败，在界面上弹提示（显示后标记已读，避免重复弹）
+    async function checkMailErrors() {
+        let list;
+        try {
+            const r = await api('GET', '/api/mail/errors');
+            list = r.errors || [];
+        } catch (e) {
+            return; // 轮询失败静默，避免刷屏
+        }
+        if (!list.length) return;
+        const first = list[0];
+        const more = list.length > 1 ? `（共 ${list.length} 条发送失败）` : '';
+        toast(`⚠ 邮件提醒发送失败：${first.item_title || '事项'} → ${first.to_addr || '?'}，${first.error || '未知错误'}${more}`, 'error');
+        // 标记已读，防止每 30 秒重复提示
+        try {
+            await api('POST', '/api/mail/errors/read', {
+                keys: list.map(e => ({ item_id: e.item_id, day: e.day })),
+            });
+        } catch (e) { /* 静默 */ }
     }
 
     // ==========================================================================
@@ -1419,6 +1515,16 @@
             }
         });
 
+        // 邮件提醒设置
+        $('mailBtn').addEventListener('click', openMailModal);
+        $('mailModalClose').addEventListener('click', closeMailModal);
+        $('mailCancel').addEventListener('click', closeMailModal);
+        $('mailForm').addEventListener('submit', saveMailSettings);
+        $('mailTestBtn').addEventListener('click', testMail);
+        $('mailModal').addEventListener('click', (e) => {
+            if (e.target.id === 'mailModal') closeMailModal();
+        });
+
         $('searchInput').addEventListener('input', debounce(applyFilters, 200));
         $('filterStatus').addEventListener('change', applyFilters);
         $('filterPriority').addEventListener('change', applyFilters);
@@ -1473,6 +1579,10 @@
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') closeModal();
         });
+
+        // 邮件发送失败轮询：启动即查一次，之后每 30 秒一次（与后台扫描节奏匹配）
+        checkMailErrors();
+        setInterval(checkMailErrors, 30000);
 
         loadItems();
     }

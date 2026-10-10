@@ -22,6 +22,7 @@
                 <button id="exportBtn" type="button" class="btn btn-secondary" title="导出 JSON 数据">导出</button>
                 <button id="importBtn" type="button" class="btn btn-secondary" title="从 JSON 文件导入数据">导入</button>
                 <input type="file" id="importFile" accept=".json,application/json" style="display:none">
+                <button id="mailBtn" type="button" class="btn btn-secondary" title="邮件提醒设置（到期前一天/当天提醒）">✉ 邮件提醒</button>
                 <button id="addItemBtn" type="button" class="btn btn-primary" title="新建顶层事项">+ 新建事项</button>
             </div>
         </header>
@@ -207,6 +208,11 @@
                 </div>
 
                 <label class="form-group">
+                    <span class="form-label">提醒邮箱（可选）</span>
+                    <input type="text" id="fieldRemindEmail" class="input" placeholder="提醒发到此邮箱，多个用逗号分隔；留空使用全局默认收件邮箱">
+                </label>
+
+                <label class="form-group">
                     <span class="form-label">标签（逗号分隔）</span>
                     <input type="text" id="fieldTags" class="input" placeholder="例如：前端, 紧急">
                 </label>
@@ -239,6 +245,60 @@
 
                 <div class="modal-footer">
                     <button type="button" id="modalCancel" class="btn btn-secondary">取消</button>
+                    <button type="submit" class="btn btn-primary">保存</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 邮件提醒设置弹窗 -->
+    <div id="mailModal" class="modal-overlay hidden">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 id="mailModalTitle">邮件提醒设置</h3>
+                <button id="mailModalClose" type="button" class="btn btn-icon" title="关闭">✕</button>
+            </div>
+            <form id="mailForm" class="modal-body">
+                <label class="form-group checkbox-group">
+                    <input type="checkbox" id="mailEnabled">
+                    <span>启用邮件提醒：计划完成日前一天 + 当天各提醒一次（已完成/挂起事项不提醒）</span>
+                </label>
+                <div class="form-row">
+                    <label class="form-group">
+                        <span class="form-label">SMTP 服务器</span>
+                        <input type="text" id="mailHost" class="input" placeholder="smtp.qq.com">
+                    </label>
+                    <label class="form-group">
+                        <span class="form-label">端口</span>
+                        <input type="number" id="mailPort" class="input" value="465" min="1" max="65535">
+                    </label>
+                </div>
+                <div class="form-row">
+                    <label class="form-group">
+                        <span class="form-label">发送邮箱账号</span>
+                        <input type="text" id="mailUser" class="input" placeholder="xxx@qq.com">
+                    </label>
+                    <label class="form-group">
+                        <span class="form-label">授权码</span>
+                        <input type="password" id="mailPass" class="input" placeholder="SMTP 授权码">
+                    </label>
+                </div>
+                <label class="form-group">
+                    <span class="form-label">发件人显示</span>
+                    <input type="text" id="mailFrom" class="input" placeholder="留空默认使用发送账号">
+                </label>
+                <label class="form-group">
+                    <span class="form-label">默认收件邮箱</span>
+                    <input type="text" id="mailTo" class="input" placeholder="收件人邮箱，多个用逗号分隔（如 a@x.com, b@x.com）">
+                </label>
+                <label class="form-group">
+                    <span class="form-label">提醒发送时间</span>
+                    <input type="time" id="mailRemindTime" value="09:00">
+                    <span class="form-hint">每天到点后才发送当天提醒（避开凌晨打扰，默认 09:00）</span>
+                </label>
+                <div class="modal-footer">
+                    <button type="button" id="mailTestBtn" class="btn btn-secondary">发送测试邮件</button>
+                    <button type="button" id="mailCancel" class="btn btn-secondary">取消</button>
                     <button type="submit" class="btn btn-primary">保存</button>
                 </div>
             </form>

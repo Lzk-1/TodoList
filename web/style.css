@@ -705,6 +705,13 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
 }
 .required { color: var(--danger); }
 
+.form-hint {
+    display: block;
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 4px;
+}
+
 .modal-footer {
     display: flex;
     justify-content: flex-end;
