@@ -894,7 +894,12 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
    ========================================================================== */
 .gantt {
     overflow: auto;
-    padding: 8px;
+    /* Why: 滚动容器不能设 padding——sticky 固定在内容区边缘(padding 内侧)，
+       滚动内容会穿过 padding 区域从冻结表头上方/首列左侧露出。
+       留白由父容器 .content 的 padding 承担 */
+    /* Why: 限制高度使甘特表自身可纵向滚动，sticky 表头(top:0)才会生效；
+           顶部栏60 + content padding 40 + 表头区约66 + 余量 */
+    max-height: calc(100vh - 200px);
 }
 .gantt-empty {
     text-align: center;
@@ -902,16 +907,26 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
     padding: 60px 0;
 }
 .gantt-table {
-    border-collapse: collapse;
+    /* Why: collapse 模式下 Chrome 会忽略 position:sticky（表头无法冻结），改用 separate */
+    border-collapse: separate;
+    border-spacing: 0;
     min-width: 100%;
 }
 .gantt-table th,
 .gantt-table td {
-    border: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
     padding: 5px 8px;
     font-size: 13px;
     text-align: center;
     white-space: nowrap;
+}
+.gantt-table th:first-child,
+.gantt-table td:first-child {
+    border-left: 1px solid var(--border);
+}
+.gantt-table tr:first-child th {
+    border-top: 1px solid var(--border);
 }
 .gantt-table th {
     background: var(--bg-elevated);
